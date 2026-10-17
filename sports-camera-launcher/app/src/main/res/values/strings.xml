@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">运动相机</string>
+
+    <!-- 无障碍服务（自动拉起） -->
+    <string name="cover_a11y_label">运动相机 · 自动拉起</string>
+    <string name="cover_a11y_desc">在副屏上保持/拉回运动相机启动器：监听副屏窗口变化，必要时把启动器重新显示到副屏。</string>
+
+    <!-- 保活前台服务通知 -->
+    <string name="cover_keeper_channel">副屏常驻</string>
+    <string name="cover_keeper_title">运动相机正在副屏运行</string>
+    <string name="cover_keeper_text">保持启动器在副屏可用</string>
+</resources>

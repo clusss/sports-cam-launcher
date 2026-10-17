@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  通知栏「录屏」按钮的浅色药丸底（第四轮第 4 项）。
+
+  为什么单独要一个浅色底：用户要求"黑色 ▶ / 红色 ■"，而现有的 bg_notif_button 是
+  深色（#FF23262B）—— 黑色 ▶ 压在深色底上等于看不见 ✗。
+  所以录屏这一颗用浅色底：▶ 用黑色、■ 用红色，两种状态都清晰 ✓。
+  ⚠ 只改外观，不改任何行为；RemoteViews 侧只需要 setTextViewText + setTextColor
+    （两者都在白名单里 ✓），不需要 setAlpha/setBackgroundColor 之类的方法。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFE9ECEF" />
+    <corners android:radius="8dp" />
+    <stroke
+        android:width="1dp"
+        android:color="#33000000" />
+</shape>

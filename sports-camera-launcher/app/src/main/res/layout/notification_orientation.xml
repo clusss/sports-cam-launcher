@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  通知栏「方向开关」的自定义布局（RemoteViews）。
+  对齐《超级小副屏》的 res/layout/notification_orientation.xml：一行 5 个按钮。
+
+  ⚠ 重要：一旦用 setCustomContentView()，系统就不再应用 setContentIntent()，
+     点通知主体不会有任何反应。所以这里自己放一行标题，并把"进入应用"的
+     PendingIntent 挂到标题上（见 OrientationNotification.build()）。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/notif_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="3dp">
+
+    <!-- 第一行：5 个方向按钮 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/orient_landscape"
+            style="@style/NotifButton"
+            android:text="横屏" />
+
+        <TextView
+            android:id="@+id/orient_reverse_landscape"
+            style="@style/NotifButton"
+            android:text="反向横屏" />
+
+        <TextView
+            android:id="@+id/orient_portrait"
+            style="@style/NotifButton"
+            android:text="竖屏" />
+
+        <TextView
+            android:id="@+id/orient_reverse_portrait"
+            style="@style/NotifButton"
+            android:text="反向竖屏" />
+
+        <TextView
+            android:id="@+id/orient_unspecified"
+            style="@style/NotifButton"
+            android:text="跟随系统" />
+    </LinearLayout>
+
+    <!-- 第二行：截屏按钮 + 标题（点标题进应用）。
+         ⚠ 这一行的排布是踩坑换来的：
+            · 原标题单独占一行 + 方向行 + 截屏行 = 三行，超出通知收起态的高度上限，
+              系统会把整条压扁（按钮变矮难按）；
+            · 若把截屏行只放进"展开态"视图，用户下拉通知栏默认看到的是收起态，
+              就会以为"开关开了但按钮不出现"。
+         所以：标题并进本行，整体只有两行 —— 收起态放得下、按钮默认可见、不被压扁。 -->
+    <LinearLayout
+        android:id="@+id/notif_screenshot_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingTop="3dp">
+
+        <!-- 截屏按钮（**第六轮定稿 A 方案：与第一行 5 个方向键完全同款**）：
+             `style="@style/NotifButton"` 直接复用 —— 深色药丸 @drawable/bg_notif_button
+             （solid #FF23262B + 圆角 8dp + 1dp #33FFFFFF 描边）、paddingTop/Bottom 9dp、
+             gravity=center、layout_width=0dp + layout_weight=1、白色 #FFFFFFFF、12sp ✓
+             ⇒ 与方向键逐项一致（同背景/圆角/内边距/字重/宽度分配）⇒ 等高、左右对齐 ✓。
+
+             ⚠⚠ 为什么只能用"深色药丸 + 白字形"（这台 ROM 的三条路都被实测否掉，别再回退 ✗）：
+               ① vector drawable（第四/五轮）→ 布局里出现 vector 就让整条自定义视图渲染失败
+                  ⇒ 通知栏那一行直接消失 ✗（通知本身还在 NMS 里，`dumpsys` 仍能查到 id=1002 ✓，
+                  极易误判成"通知没发出来"）；
+               ② PNG 位图 ImageView（第五轮追加）→ 行能显示了，但 SystemUI 强制着色/反色
+                  ⇒ 近黑图标渲染成白色 ✗（Lead 像素测量：换图前后图标区近白像素都是 352 ✓）；
+               ③ TextView 字形设 `#111111` 黑 → 仍被渲染成白 ✗（近白 352→358 没降 ✗）。
+             结论：本机做不到"浅灰底 + 黑色图标" ⇒ 用户明确选 A：与方向键一致的深色药丸 + 白色字形 ✓
+             （他嫌的是早先那个浅色药丸 ✗，方向键的深色药丸本身没问题 ✓）。
+             颜色仍由 build() 用 `setTextColor` 覆盖三态（▶ 白 / ■ 红 / ⋯ 白）✓，见 OrientationNotification。 -->
+        <TextView
+            android:id="@+id/notif_screenshot"
+            style="@style/NotifButton"
+            android:text="&#9986;" />
+
+        <!-- 录屏按钮（第二轮 D1 / 第六轮定稿）：**只有一个键** —— 未录屏 ▶ / 录屏中 ■ / 合并中 ⋯，
+             点它就是开始/结束（screenrecord 不支持暂停，所以取消暂停功能）。
+             ① 同样复用 `@style/NotifButton`：深色药丸底 + 白色字形 + 与方向键一模一样的
+                宽度分配（0dp + weight=1）/内边距/字重 ⇒ 两行药丸等高、左右对齐 ✓；
+             ② 字形三态由 build() 用 `setTextViewText` + `setTextColor` 切换：
+                **白 ▶**（#FFFFFFFF）/ **红 ■**（#FF3B30，用户明确要红 ✓）/ **白 ⋯**（#FFFFFFFF）；
+             ③ 布局里默认给 ▶，即使某次没切到也不会是空白 ✓。 -->
+        <TextView
+            android:id="@+id/notif_record"
+            style="@style/NotifButton"
+            android:text="&#9654;" />
+
+        <!-- ★ 第九轮第 3 项：**「退出」药丸已按用户要求删除** ✗
+             用户原话："把通知栏的脱困通道去掉，改成在视频1界面内右上角右滑" ✓
+             ⇒ 本布局第二行只有 ✂ / ▶ / 标题 三样 ✓（不留空位 ✓）；
+             脱困出口改为：① 保活通知(1001) 里那条「退出悬浮窗」action ✓
+                            ② 视频页右上角右滑（desktop-ui 实现，走同一个
+                               `CoverKeeperService.ACTION_EXIT_OVERLAY` ✓）
+             历史提醒（保留价值）：这台机器上 vector=整行消失、PNG=被反色成白，
+             所以任何按钮都只能用"纯文字 + `@style/NotifButton`" ✓。 -->
+
+        <!-- 标题（点它进应用）。weight=3 是**故意**的：第二行合计
+             ✂(1) + ▶(1) + 标题(3) = 5 个权重单位，与第一行 5 个方向键(各 1) 的网格对齐 ✓
+             ⇒ 两颗药丸的宽度、左右边缘与上面第一、二个方向键基本重合 ✓；
+             标题占 3/5 行宽（≈214dp），11sp 下放得下「运动相机 · 副屏（反向横屏）点此进入」✓。 -->
+        <TextView
+            android:id="@+id/notif_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="3"
+            android:gravity="center_vertical"
+            android:paddingStart="8dp"
+            android:paddingEnd="4dp"
+            android:text="运动相机 · 副屏"
+            android:textColor="#FFFFFFFF"
+            android:textSize="11sp" />
+    </LinearLayout>
+</LinearLayout>

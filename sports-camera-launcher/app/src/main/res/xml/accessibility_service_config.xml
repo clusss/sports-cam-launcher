@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  自动拉起用的无障碍服务配置。
+  数值取自《超级小副屏》反编译的 res/xml/accessibility_service_config.xml：
+    accessibilityEventTypes="0x00400020"
+        = TYPE_WINDOW_STATE_CHANGED (0x20) | TYPE_WINDOWS_CHANGED (0x400000)
+    accessibilityFeedbackType="0x00000010" = FEEDBACK_GENERIC
+    accessibilityFlags="0x00000043"
+        = FLAG_DEFAULT (0x1) | FLAG_INCLUDE_NOT_IMPORTANT_VIEWS (0x2)
+        | FLAG_RETRIEVE_INTERACTIVE_WINDOWS (0x40)
+
+  ⚠ 勘误：有不少二手资料把 0x40 说成 "FLAG_REQUEST_MULTI_WINDOW_ACCESS"，
+     但 compileSdk 34 的 attr 定义里根本没有这个 flag —— 0x40 实际是
+     **flagRetrieveInteractiveWindows（可检索交互窗口）**，这正是跨屏观察窗口所需要的能力。
+     用可读名称书写（AAPT 已校验通过）。
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/cover_a11y_desc"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowsChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
+    android:notificationTimeout="0"
+    android:canRetrieveWindowContent="true"
+    android:canTakeScreenshot="true" />

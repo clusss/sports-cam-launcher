@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ============ 权限 ============ -->
+    <!-- 媒体读取：targetSdk 29 走 READ_EXTERNAL_STORAGE（Android 13 上系统仍对其生效），
+         同时声明 Android 13 的新权限，两者一起申请，哪条生效用哪条。
+         注意：不能给 READ_EXTERNAL_STORAGE 加 maxSdkVersion=32，否则 API 33+ 上无法申请。 -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+
+    <!-- 把媒体移入"最近删除"需要写权限（targetSdk 29 + requestLegacyExternalStorage 下按传统路径 rename） -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+
+    <!-- 主界面静音：把媒体音量压到 0 -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- 应用列表「卸载该应用」的兜底路径：无 Shizuku 时用 ACTION_DELETE 弹系统确认框。
+         targetSdk 29 + Android 13 一般能弹，但声明上更稳，也为将来升 targetSdk 留路。 -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+
+    <!-- ★ 免 Shizuku 写 vivo 副屏白名单（`fold_adaptive_screen_app_list`）。
+         背景：实测"重挂悬浮窗后启动仍被拦"的真因是当时 Shizuku 没在运行 ——
+         白名单写入整段被跳过、`move-stack` 兜底开头就返回失败，于是 vivo 静默拦截被
+         当成"成功"，既不重试也没有任何日志。
+         本权限 protectionLevel 含 development，可由 `pm grant` 授予（真机 dumpsys 确认），
+         装机后执行：
+           adb -s <设备> shell pm grant cn.pashiguoke.subscreen android.permission.WRITE_SECURE_SETTINGS
+         未授予时代码必须优雅降级并在日志写明"白名单写入跳过"，绝不静默。 -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+
+    <!-- 录屏时"单独录一路麦克风"（结束后用 MediaExtractor + MediaMuxer 机内合并进视频）。
+         ⚠ 本机权限弹窗会出现在没有面板的主屏上（用户看不见）→ 装机时用
+           adb shell pm grant cn.pashiguoke.subscreen android.permission.RECORD_AUDIO
+         直接授予；代码里必须 checkSelfPermission，未授予时只录画面并明确写原因，
+         **绝不去弹系统权限框**（那会落在主屏上）。 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- 「修改系统设置」：自动息屏要写 Settings.System.SCREEN_OFF_TIMEOUT。
+         这是特殊权限，光声明不够，还得由用户到系统页面手动授予
+         —— 控制台「自动息屏」下方提供了授予入口（ACTION_MANAGE_WRITE_SETTINGS）。
+         有 Shizuku 时不需要它（shell 直接 settings put system screen_off_timeout）。 -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+
+    <!--
+      把媒体移入"最近删除"需要按路径直接操作文件（rename）。
+      targetSdk 29 的 legacy 存储 + WRITE_EXTERNAL_STORAGE 在 Android 13 上已经失效，
+      实测 rename 会失败并报"移动失败"；"所有文件访问"是这类文件管理操作的正常前提。
+      控制台里有「授予『所有文件访问』」按钮，点开对应系统设置页。
+    -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+
+    <!-- 相机 / 手电筒 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FLASHLIGHT" />
+
+    <!-- 应用列表需要看到全部已安装应用 -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
+    <!-- ============ 副屏能力相关权限 ============ -->
+
+    <!-- Shizuku 授权（声明式，仍需用户在 Shizuku 里点允许） -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+    <!-- ShizukuProvider 需要它（原版《超级小副屏》同样声明）；普通 App 申请不到，仅声明 -->
+    <uses-permission
+        android:name="android.permission.INTERACT_ACROSS_USERS_FULL"
+        tools:ignore="ProtectedPermissions" />
+    <!-- 覆盖窗口：无障碍/保活服务在副屏上的常驻入口 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- 前台服务保活（监控折叠 / 把启动器拉回副屏） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!-- 双击「相簿 #2」清理后台进程（悬浮窗模式下系统后台面板用不了） -->
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
+    <!-- 通知（Android 13+ 需运行时申请） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 不用 Shizuku 时的前台应用探测降级方案 -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- 折叠/亮屏 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
+    <!-- 开机自启 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!--
+      改造机「缺少前置摄像头」：相机能力必须声明为非必需，
+      否则应用商店/安装器会因缺少硬件特性而拒绝安装。
+    -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
+
+    <!--
+      「支持副屏投放」：与《超级小副屏》一致地声明。
+      注意：AOSP 的 ActivityTaskSupervisor.mSupportsMultiDisplay 是设备级开关，
+      本应用声明它并不会翻转该开关；但 ROM（OriginOS）侧的兼容性判定有可能读它，
+      代价为零，因此保留。
+    -->
+    <uses-feature
+        android:name="android.software.activities_on_secondary_displays"
+        android:required="false" />
+
+    <!-- Android 11+ 包可见性：显式列出我们需要的 intent 查询 -->
+    <queries>
+        <!-- Open Camera：拍摄按钮的目标应用 -->
+        <package android:name="net.sourceforge.opencamera" />
+        <!-- Shizuku 主程序 -->
+        <package android:name="moe.shizuku.privileged.api" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.STILL_IMAGE_CAMERA" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="video/*" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:largeHeap="true"
+        android:supportsRtl="false"
+        android:hardwareAccelerated="true"
+        android:theme="@style/Theme.SportsCam">
+
+        <!--
+          入口 Activity（跳板）。
+
+          ★ 刻意不声明 showWhenLocked / turnScreenOn —— 这是关键，实测得出：
+
+          vivo 的快捷启动(SmartKey)会根据"目标 Activity 自己有没有声明 showWhenLocked"
+          来决定要不要先弹指纹验证：
+            · 声明了 → 认为应用自己能处理锁屏 → 直接启动、不弹指纹
+              （我们之前就是这样：启动被跳过验证，而 vivo 自绘的副屏锁屏
+                又不允许普通 Activity 显示 → 只见启动动画，界面永远出不来）
+            · 没声明 → 先弹指纹，验证通过后再启动
+              （原版《超级小副屏》的 MainActivity 正是如此，所以它能"秒进应用"）
+
+          所以入口必须"看起来就是个普通的主屏应用"，把锁屏验证交回给系统。
+          副屏界面的 showWhenLocked 保留在 SubActivity 上（对齐原版）。
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="standard"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|uiMode|navigation"
+            android:theme="@style/Theme.SportsCam">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <!--
+                  ⚠ 刻意 不声明 category.HOME。
+                  原因：锁屏状态下启动 HOME 应用时，Android 的 KeyguardController 会把它
+                  推迟到解锁之后再显示 —— 表现就是"只在锁屏上放一段启动动画，界面不上来"。
+                  原版《超级小副屏》的 MainActivity 也只有 LAUNCHER，没有 HOME。
+                  副屏主页身份由 CoverHomeActivity 的 SECONDARY_HOME 承担。
+                -->
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          副屏界面 Activity —— 对齐《超级小副屏》的 SubActivity：
+            · taskAffinity 独立（cn.pashiguoke.subscreen.cover）
+              → 投放时会在副屏 新建独立任务栈，而不是复用主屏上那个后台任务，
+                这是"被唤起却停在后台"的正解；
+            · showWhenLocked + turnScreenOn → 息屏快捷启动时能直接显示；
+            · HOME + SECONDARY_HOME → 能被系统「主屏幕」选择列表列出，
+              也作为 vivo 外屏桌面的候选；
+            · 不声明 LAUNCHER → 不会多出一个应用图标。
+
+          ★ 关于 category.HOME（很容易踩）：
+            早期为了排查"锁屏下启动被推迟"，我把 HOME 从 MainActivity 上摘掉了；
+            但没有 HOME 类别，应用就不会出现在系统「主屏幕」选择列表里，
+            用户也就无法把它设成桌面。真正的原因后来查明是 `showWhenLocked`
+            （见 MainActivity 那段注释），与 HOME 无关。
+            现在把 HOME 加回副屏界面（它才是真正充当桌面的那个），
+            入口跳板 MainActivity 仍然只有 LAUNCHER —— 这样"点图标启动"和
+            "按 Home 键回桌面"两条路径各自都干净。
+        -->
+        <activity
+            android:name=".CoverHomeActivity"
+            android:exported="true"
+            android:enabled="true"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:taskAffinity="cn.pashiguoke.subscreen.cover"
+            android:resizeableActivity="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|uiMode|navigation"
+            android:theme="@style/Theme.SportsCam">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.SECONDARY_HOME" />
+            </intent-filter>
+        </activity>
+
+        <!-- ==============================================================
+             兼容原版《超级小副屏》的类名。
+
+             why：vivo 的「快捷启动 / SmartKey」很可能把要启动的应用保存成
+             **精确 ComponentName**（包名+类名），而不只是包名。原版入口是
+                 cn.pashiguoke.subscreen/com.coverscreen.assistant.MainActivity
+             我们沿用了同一个包名（为了过 ROM 的副屏白名单），但类名不同，
+             于是快捷启动会去拉起一个已不存在的类 → 只放个启动动画就什么都不发生。
+
+             这里把原版类名原样注册回来（行为完全等价于我们的入口/副屏界面），
+             无论 vivo 存的是包名还是精确类名都能正确启动。
+             ============================================================== -->
+        <activity
+            android:name="com.coverscreen.assistant.MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|uiMode|navigation"
+            android:theme="@style/Theme.SportsCam">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name="com.coverscreen.assistant.SubActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="cn.pashiguoke.subscreen.cover"
+            android:resizeableActivity="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|uiMode|navigation"
+            android:theme="@style/Theme.SportsCam">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+        <meta-data
+            android:name="moe.shizuku.client.V3_SUPPORT"
+            android:value="true" />
+
+        <!-- ==============================================================
+             自动拉起：无障碍服务
+             监听 WINDOW_STATE_CHANGED / WINDOWS_CHANGED，
+             用 FLAG_REQUEST_MULTI_WINDOW_ACCESS 拿到副屏上的窗口事件。
+             ============================================================== -->
+        <service
+            android:name="com.dsh.sportscam.cover.CoverTriggerAccessibilityService"
+            android:exported="false"
+            android:label="@string/cover_a11y_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- 前台保活服务：常驻通知 + 必要时把启动器拉回副屏 -->
+        <service
+            android:name="com.dsh.sportscam.cover.CoverKeeperService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- 通知栏方向开关的点击接收器 -->
+        <receiver
+            android:name="com.dsh.sportscam.cover.OrientationActionReceiver"
+            android:exported="false" />
+
+        <!-- 通知栏「截屏」按钮：透明 Activity。
+             用 Activity 而不是广播，是因为启动 Activity 会被系统自动收起通知栏，
+             否则通知栏会盖在副屏上、截图里全是通知栏（用户实测反馈）。 -->
+        <activity
+            android:name="com.dsh.sportscam.cover.CoverShotActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- 开机自启：把启动器投回副屏 -->
+        <receiver
+            android:name="com.dsh.sportscam.cover.BootReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>
